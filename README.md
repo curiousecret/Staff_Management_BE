@@ -7,7 +7,7 @@ A RESTful API backend built with FastAPI for managing staff information with aut
 - User authentication and authorization with JWT tokens
 - Staff management (CRUD operations)
 - PostgreSQL database with async support
-- API documentation with Swagger UI and ReDoc
+- API documentation with Swagger UI
 - Clean architecture with separation of concerns (routers, services, repositories)
 - Environment-based configuration
 - CORS middleware support

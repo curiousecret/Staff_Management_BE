@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_async_session
 from src.core.auth import get_current_user
 from src.models.user_model import User
-from src.schemas.auth_schema import UserRegister, UserLogin, Token
+from src.schemas.auth_schema import UserRegister, UserLogin, Token, RefreshTokenRequest
 from src.schemas.user_schema import UserResponse
 from src.services.auth_service import AuthService
 
@@ -62,9 +62,9 @@ async def login(
     """
     Login with username and password.
 
-    Returns a JWT access token to be used for authenticating subsequent requests.
+    Returns a JWT access token and refresh token.
 
-    Use the token in the Authorization header: `Bearer <token>`
+    Use the access token in the Authorization header: `Bearer <token>`
 
     - **username**: Your username
     - **password**: Your password
@@ -75,10 +75,36 @@ async def login(
 
 
 @router.post(
+    "/refresh",
+    response_model=Token,
+    summary="Refresh access token",
+    description="Use a refresh token to obtain a new access token without re-authenticating.",
+)
+async def refresh_token(
+    refresh_request: RefreshTokenRequest,
+    service: AuthService = Depends(get_auth_service),
+) -> Token:
+    """
+    Refresh the access token using a refresh token.
+
+    When your access token expires (after 30 minutes), use this endpoint to get a new one
+    without requiring the user to log in again.
+
+    Frontend should:
+    1. Store the refresh token securely (httpOnly cookie recommended)
+    2. When access token expires or is about to expire, call this endpoint
+    3. Use the new access token for subsequent requests
+
+    - **refresh_token**: The refresh token received from login
+    """
+    return await service.refresh_access_token(refresh_request.refresh_token)
+
+
+@router.post(
     "/logout",
     status_code=status.HTTP_200_OK,
     summary="Logout user",
-    description="Logout the current authenticated user by blacklisting their token.",
+    description="Logout the current authenticated user by blacklisting their token and revoking all refresh tokens.",
 )
 async def logout(
     token: str = Depends(oauth2_scheme),
@@ -86,12 +112,15 @@ async def logout(
     service: AuthService = Depends(get_auth_service),
 ) -> dict:
     """
-    Logout the authenticated user by blacklisting their token.
+    Logout the authenticated user by blacklisting their access token and revoking all refresh tokens.
 
-    This endpoint invalidates the JWT token on the server side.
-    The token will no longer be accepted for authentication, even if it hasn't expired yet.
-    Expired tokens are automatically cleaned up from the blacklist.
+    This endpoint:
+    - Invalidates the current JWT access token on the server side
+    - Revokes all refresh tokens for the user (logout from all devices)
+    - Cleans up expired tokens
+
+    The tokens will no longer be accepted for authentication, even if they haven't expired yet.
 
     Requires a valid JWT token in the Authorization header: `Bearer <token>`
     """
-    return await service.logout(token)
+    return await service.logout(token, current_user.id)

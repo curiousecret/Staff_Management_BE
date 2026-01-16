@@ -1,12 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timedelta
 from jose import jwt
 
 from src.schemas.auth_schema import UserRegister, UserLogin, Token
 from src.schemas.user_schema import UserResponse
 from src.repositories.user_repository import UserRepository
 from src.repositories.token_blacklist_repository import TokenBlacklistRepository
-from src.core.auth import verify_password, get_password_hash, create_access_token
+from src.repositories.refresh_token_repository import RefreshTokenRepository
+from src.core.auth import verify_password, get_password_hash, create_access_token, create_refresh_token
 from src.core.config import get_settings
 from src.core.exceptions import UnauthorizedException
 
@@ -21,8 +22,10 @@ class AuthService:
     """
 
     def __init__(self, session: AsyncSession) -> None:
+        self.session = session
         self.repository = UserRepository(session)
         self.token_blacklist_repository = TokenBlacklistRepository(session)
+        self.refresh_token_repository = RefreshTokenRepository(session)
 
     async def register(self, user_data: UserRegister) -> UserResponse:
         """
@@ -47,13 +50,13 @@ class AuthService:
 
     async def login(self, login_data: UserLogin) -> Token:
         """
-        Authenticate user and generate JWT token.
+        Authenticate user and generate JWT tokens (access + refresh).
 
         Args:
             login_data: User login credentials
 
         Returns:
-            JWT access token
+            JWT access token and refresh token
 
         Raises:
             UnauthorizedException: If credentials are invalid
@@ -71,14 +74,35 @@ class AuthService:
         # Create access token
         access_token = create_access_token(data={"sub": user.username})
 
-        return Token(access_token=access_token, token_type="bearer")
+        # Create refresh token
+        refresh_token_str = create_refresh_token()
+        refresh_token_expires = datetime.utcnow() + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
 
-    async def logout(self, token: str) -> dict:
+        # Store refresh token in database
+        await self.refresh_token_repository.create(
+            token=refresh_token_str,
+            user_id=user.id,
+            expires_at=refresh_token_expires
+        )
+
+        # Commit the transaction
+        await self.session.commit()
+
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token_str,
+            token_type="bearer"
+        )
+
+    async def logout(self, token: str, user_id: int) -> dict:
         """
-        Logout user by blacklisting their token.
+        Logout user by blacklisting their access token and revoking all refresh tokens.
 
         Args:
-            token: The JWT token to invalidate
+            token: The JWT access token to invalidate
+            user_id: The ID of the user logging out
 
         Returns:
             Success message
@@ -101,11 +125,18 @@ class AuthService:
 
             expires_at = datetime.fromtimestamp(exp_timestamp)
 
-            # Add token to blacklist
+            # Add access token to blacklist
             await self.token_blacklist_repository.add_token(token, expires_at)
+
+            # Revoke all refresh tokens for this user
+            await self.refresh_token_repository.revoke_all_user_tokens(user_id)
 
             # Cleanup expired tokens (opportunistic cleanup)
             await self.token_blacklist_repository.cleanup_expired_tokens()
+            await self.refresh_token_repository.cleanup_expired_tokens()
+
+            # Commit the transaction
+            await self.session.commit()
 
             return {"message": "Successfully logged out"}
 
@@ -123,3 +154,52 @@ class AuthService:
             True if blacklisted, False otherwise
         """
         return await self.token_blacklist_repository.is_blacklisted(token)
+
+    async def refresh_access_token(self, refresh_token_str: str) -> Token:
+        """
+        Generate a new access token using a refresh token.
+
+        Args:
+            refresh_token_str: The refresh token string
+
+        Returns:
+            New JWT access token and the same refresh token
+
+        Raises:
+            UnauthorizedException: If refresh token is invalid or expired
+        """
+        # Get refresh token from database
+        refresh_token = await self.refresh_token_repository.get_by_token(refresh_token_str)
+
+        if refresh_token is None:
+            raise UnauthorizedException("Invalid refresh token")
+
+        # Check if token is revoked
+        if refresh_token.is_revoked:
+            raise UnauthorizedException("Refresh token has been revoked")
+
+        # Check if token is expired
+        if refresh_token.expires_at < datetime.utcnow():
+            raise UnauthorizedException("Refresh token has expired")
+
+        # Get user from database
+        user = await self.repository.get_by_id(refresh_token.user_id)
+
+        if user is None:
+            raise UnauthorizedException("User not found")
+
+        # Update last used timestamp
+        await self.refresh_token_repository.update_last_used(refresh_token_str)
+
+        # Create new access token
+        access_token = create_access_token(data={"sub": user.username})
+
+        # Commit the transaction
+        await self.session.commit()
+
+        # Return new access token with the same refresh token
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token_str,
+            token_type="bearer"
+        )

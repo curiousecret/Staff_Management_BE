@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 from src.core.config import get_settings
 from src.models.user_model import User  # noqa: F401 - Import needed for SQLModel metadata
 from src.models.token_blacklist_model import TokenBlacklist  # noqa: F401 - Import needed for SQLModel metadata
+from src.models.refresh_token_model import RefreshToken  # noqa: F401 - Import needed for SQLModel metadata
 
 settings = get_settings()
 

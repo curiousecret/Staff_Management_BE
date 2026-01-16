@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+import secrets
 
 from src.core.config import get_settings
 from src.core.database import get_async_session
@@ -76,6 +77,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
     return encoded_jwt
+
+
+def create_refresh_token() -> str:
+    """
+    Create a secure random refresh token.
+
+    Generates a cryptographically secure random token using secrets module.
+    This token is stored in the database and used to obtain new access tokens.
+
+    Returns:
+        A secure random token string (64 characters)
+    """
+    return secrets.token_urlsafe(48)  # 48 bytes = 64 characters when base64 encoded
 
 
 async def get_current_user(

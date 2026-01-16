@@ -68,6 +68,11 @@ class Token(BaseModel):
         description="JWT access token",
     )
 
+    refresh_token: str = Field(
+        ...,
+        description="Refresh token for obtaining new access tokens",
+    )
+
     token_type: str = Field(
         default="bearer",
         description="Token type",
@@ -78,3 +83,12 @@ class TokenData(BaseModel):
     """Schema for token payload data."""
 
     username: Optional[str] = None
+
+
+class RefreshTokenRequest(BaseModel):
+    """Schema for refresh token request."""
+
+    refresh_token: str = Field(
+        ...,
+        description="Refresh token to use for obtaining a new access token",
+    )
