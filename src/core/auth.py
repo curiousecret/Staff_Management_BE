@@ -11,6 +11,7 @@ from src.core.database import get_async_session
 from src.core.exceptions import UnauthorizedException
 from src.models.user_model import User
 from src.repositories.user_repository import UserRepository
+from src.repositories.token_blacklist_repository import TokenBlacklistRepository
 from src.schemas.auth_schema import TokenData
 
 
@@ -92,8 +93,15 @@ async def get_current_user(
         The authenticated User object
 
     Raises:
-        UnauthorizedException: If token is invalid or user not found
+        UnauthorizedException: If token is invalid, blacklisted, or user not found
     """
+    # Check if token is blacklisted first
+    token_blacklist_repository = TokenBlacklistRepository(session)
+    is_blacklisted = await token_blacklist_repository.is_blacklisted(token)
+
+    if is_blacklisted:
+        raise UnauthorizedException("Token has been revoked")
+
     try:
         # Decode the JWT token
         payload = jwt.decode(

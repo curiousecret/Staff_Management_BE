@@ -1,21 +1,28 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime
+from jose import jwt
 
 from src.schemas.auth_schema import UserRegister, UserLogin, Token
 from src.schemas.user_schema import UserResponse
 from src.repositories.user_repository import UserRepository
+from src.repositories.token_blacklist_repository import TokenBlacklistRepository
 from src.core.auth import verify_password, get_password_hash, create_access_token
+from src.core.config import get_settings
 from src.core.exceptions import UnauthorizedException
+
+settings = get_settings()
 
 
 class AuthService:
     """
     Service layer for authentication business logic.
 
-    Handles user registration, login, and token generation.
+    Handles user registration, login, logout, and token management.
     """
 
     def __init__(self, session: AsyncSession) -> None:
         self.repository = UserRepository(session)
+        self.token_blacklist_repository = TokenBlacklistRepository(session)
 
     async def register(self, user_data: UserRegister) -> UserResponse:
         """
@@ -65,3 +72,54 @@ class AuthService:
         access_token = create_access_token(data={"sub": user.username})
 
         return Token(access_token=access_token, token_type="bearer")
+
+    async def logout(self, token: str) -> dict:
+        """
+        Logout user by blacklisting their token.
+
+        Args:
+            token: The JWT token to invalidate
+
+        Returns:
+            Success message
+
+        Raises:
+            UnauthorizedException: If token is invalid
+        """
+        try:
+            # Decode token to get expiration time
+            payload = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM]
+            )
+
+            # Get expiration timestamp
+            exp_timestamp = payload.get("exp")
+            if exp_timestamp is None:
+                raise UnauthorizedException("Invalid token")
+
+            expires_at = datetime.fromtimestamp(exp_timestamp)
+
+            # Add token to blacklist
+            await self.token_blacklist_repository.add_token(token, expires_at)
+
+            # Cleanup expired tokens (opportunistic cleanup)
+            await self.token_blacklist_repository.cleanup_expired_tokens()
+
+            return {"message": "Successfully logged out"}
+
+        except jwt.JWTError:
+            raise UnauthorizedException("Invalid token")
+
+    async def is_token_blacklisted(self, token: str) -> bool:
+        """
+        Check if a token is blacklisted.
+
+        Args:
+            token: The JWT token to check
+
+        Returns:
+            True if blacklisted, False otherwise
+        """
+        return await self.token_blacklist_repository.is_blacklisted(token)
