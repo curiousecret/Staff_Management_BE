@@ -80,13 +80,113 @@ DEBUG=True
 ```
 
 2. Update the environment variables:
-
    - `DATABASE_URL`: Your PostgreSQL connection string
    - `SECRET_KEY`: A secure random string for JWT token signing (generate with `openssl rand -hex 32`)
    - `APP_ENV`: Environment mode (development/production)
    - `DEBUG`: Enable/disable debug mode (True/False)
 
 3. Ensure your PostgreSQL database is running and accessible with the credentials provided in `DATABASE_URL`.
+
+## Database Setup
+
+After configuring your PostgreSQL connection, you need to set up the database tables. Choose one of the following methods:
+
+### Method 1: Using Database Schema (Recommended for New Setup)
+
+This method creates all tables from scratch using SQL scripts.
+
+1. **Create the database** in pgAdmin:
+   - Open pgAdmin and connect to your PostgreSQL server
+   - Right-click on "Databases" and select "Create" > "Database..."
+   - Enter your database name (must match the database name in your `DATABASE_URL`)
+   - Click "Save"
+
+2. **Run the schema script**:
+   - Right-click on your newly created database
+   - Select "Query Tool"
+   - Open the schema file: `database/schema.sql`
+   - Click "Execute/Run" (F5) to create all tables and indexes
+
+3. **Load sample data** (optional, for testing):
+   - In the same Query Tool, open: `database/sample_data.sql`
+   - Click "Execute/Run" (F5) to insert sample records
+
+**Verification:**
+After running the scripts, you should have:
+- 4 tables: `users`, `staff`, `refresh_tokens`, `token_blacklist`
+- Sample users with test credentials (see sample_data.sql for login details)
+- 13 sample staff records (10 active, 3 inactive)
+
+### Method 2: Using Database Backup File
+
+This method restores a complete database from a backup file (if provided).
+
+1. **Create an empty database** in pgAdmin:
+   - Right-click on "Databases" and select "Create" > "Database..."
+   - Enter your database name
+   - Click "Save"
+
+2. **Restore from backup**:
+   - Right-click on your database
+   - Select "Restore..."
+   - In the "Filename" field, browse to your `.backup` file
+   - Set "Format" to "Custom or tar"
+   - Click "Restore"
+
+3. **Wait for completion**:
+   - Check the process status in the background processes
+   - Verify tables were created by expanding the database tree
+
+### Database Structure
+
+The database includes the following tables:
+
+```
+users
+├── id (Primary Key)
+├── username (Unique)
+├── hashed_password
+├── created_at
+└── updated_at
+
+staff
+├── id (Primary Key)
+├── staff_id (Unique Business ID)
+├── name
+├── dob (Date of Birth)
+├── salary
+├── status (active/inactive)
+├── created_at
+└── updated_at
+
+refresh_tokens
+├── id (Primary Key)
+├── token (Unique)
+├── user_id (Foreign Key → users.id)
+├── is_revoked
+├── created_at
+├── expires_at
+└── last_used_at
+
+token_blacklist
+├── id (Primary Key)
+├── token (Unique)
+├── blacklisted_at
+└── expires_at
+```
+
+### Test Credentials (Sample Data)
+
+If you loaded the sample data, you can use these credentials for testing:
+
+| Username | Password | Role |
+|----------|----------|------|
+| admin | admin123 | Administrator |
+| manager | manager123 | Manager |
+| user1 | password123 | Regular User |
+| testuser | test123 | Test User |
+
+**WARNING:** Change these passwords before deploying to production!
 
 ## Running the Application
 
@@ -101,7 +201,6 @@ uvicorn main:app --reload
 The API will be available at `http://localhost:8000`
 
 3. Access the interactive API documentation:
-
    - Swagger UI: `http://localhost:8000/docs`
 
 4. Health check endpoint:
@@ -131,6 +230,9 @@ Staff_Management_BE/
 │   └── routers/        # API route handlers
 │       ├── auth_router.py    # Authentication endpoints
 │       └── staff_router.py   # Staff management endpoints
+├── database/
+│   ├── schema.sql      # Database schema creation script
+│   └── sample_data.sql # Sample data for testing
 ├── main.py             # Application entry point
 ├── security.py         # Security utilities
 ├── requirements.txt    # Python dependencies
@@ -155,20 +257,5 @@ For detailed API documentation, visit `/docs` after starting the server.
 To run in development mode with auto-reload:
 
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-## Production Deployment
-
-1. Set environment variables:
-
-   - Set `DEBUG=False`
-   - Set `APP_ENV=production`
-   - Update CORS settings in `main.py` to restrict origins
-   - Use a production-grade database
-
-2. Run with production server:
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn main:app --reload
 ```
