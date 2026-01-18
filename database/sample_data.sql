@@ -2,10 +2,6 @@
 -- PostgreSQL Database
 -- Run this script AFTER creating the schema with schema.sql
 
--- ============================================
--- WARNING: This is sample data for testing only
--- DO NOT use in production environments
--- ============================================
 
 -- Clear existing data (if any)
 TRUNCATE TABLE token_blacklist CASCADE;

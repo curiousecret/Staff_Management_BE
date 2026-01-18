@@ -27,7 +27,7 @@ A RESTful API backend built with FastAPI for managing staff information with aut
 
 Before you begin, ensure you have the following installed:
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - PostgreSQL database
 - pip (Python package manager)
 - Virtual environment tool (venv)
@@ -82,7 +82,7 @@ DEBUG=True
 2. Update the environment variables:
    - `DATABASE_URL`: Your PostgreSQL connection string
    - `SECRET_KEY`: A secure random string for JWT token signing (generate with `openssl rand -hex 32`)
-   - `APP_ENV`: Environment mode (development/production)
+   - `APP_ENV`: Environment mode (development)
    - `DEBUG`: Enable/disable debug mode (True/False)
 
 3. Ensure your PostgreSQL database is running and accessible with the credentials provided in `DATABASE_URL`.
@@ -113,6 +113,7 @@ This method creates all tables from scratch using SQL scripts.
 
 **Verification:**
 After running the scripts, you should have:
+
 - 4 tables: `users`, `staff`, `refresh_tokens`, `token_blacklist`
 - Sample users with test credentials (see sample_data.sql for login details)
 - 13 sample staff records (10 active, 3 inactive)
@@ -179,14 +180,9 @@ token_blacklist
 
 If you loaded the sample data, you can use these credentials for testing:
 
-| Username | Password | Role |
-|----------|----------|------|
-| admin | admin123 | Administrator |
-| manager | manager123 | Manager |
-| user1 | password123 | Regular User |
-| testuser | test123 | Test User |
-
-**WARNING:** Change these passwords before deploying to production!
+| Username | Password | Role          |
+| -------- | -------- | ------------- |
+| admin    | admin123 | Administrator |
 
 ## Running the Application
 
